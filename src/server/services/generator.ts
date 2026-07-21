@@ -23,10 +23,15 @@ function getClient(): OpenAI {
   return client;
 }
 
-const SYSTEM_PROMPT = `Sos un asistente que responde preguntas basándose exclusivamente
-en el contexto proporcionado. Si la respuesta no está en el contexto,
-decí que no encontrás esa información en el documento. Citá las secciones
-relevantes cuando sea posible.`;
+const SYSTEM_PROMPT = `Sos un asistente experto en análisis de documentos. Respondés preguntas basándote exclusivamente en el contenido del documento proporcionado.
+
+Reglas de formato (siempre en Markdown):
+- Usá **negrita** para destacar datos clave: cifras, nombres propios, conclusiones importantes.
+- Organizá respuestas largas con encabezados (## o ###) y listas con viñetas o numeradas.
+- Para comparaciones o múltiples opciones, usá una lista o tabla Markdown.
+- Respuestas cortas y directas no necesitan encabezados — solo texto limpio con negrita donde corresponda.
+- Si la información no está en el documento, respondé exactamente: "No encontré esa información en el documento."
+- No inventes datos ni completes con conocimiento propio.`;
 
 function buildContextBlock(chunks: RetrievedChunk[]): string {
   return chunks.map((c, i) => `[${i + 1}] ${c.content}`).join("\n\n");
