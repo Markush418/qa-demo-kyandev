@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: document-qa-demo
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    envVars:
+      - key: OPENAI_API_KEY
+        sync: false          # Se completa manualmente en el dashboard de Render
+      - key: DATABASE_URL
+        value: ./data/docqa.db
+      - key: NODE_ENV
+        value: production
+      - key: MAX_FILE_SIZE_MB
+        value: "20"
+      - key: MAX_PAGES
+        value: "200"
+      - key: CLEANUP_HOURS
+        value: "24"
