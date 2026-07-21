@@ -6,6 +6,7 @@ export const documents = sqliteTable("documents", {
   fileType: text("file_type").notNull(), // "pdf" | "docx"
   pageCount: integer("page_count").notNull(),
   chunkCount: integer("chunk_count").notNull(),
+  fullText: text("full_text"),            // texto completo para full-context mode
   createdAt: integer("created_at").notNull(),
 });
 

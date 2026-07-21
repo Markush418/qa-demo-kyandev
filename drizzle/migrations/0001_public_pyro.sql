@@ -1,0 +1,1 @@
+ALTER TABLE `documents` ADD `full_text` text;

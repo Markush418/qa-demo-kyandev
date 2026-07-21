@@ -79,6 +79,7 @@ uploadRoute.post("/", async (c) => {
     fileType,
     pageCount: extracted.pageCount,
     chunkCount: chunks.length,
+    fullText: extracted.text,
     createdAt: now,
   });
 

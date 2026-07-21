@@ -4,7 +4,13 @@ import { asc, eq } from "drizzle-orm";
 import { db } from "../db";
 import { documents, conversations } from "../db/schema";
 import { retrieveRelevantChunks } from "../services/retriever";
-import { generateAnswer, NO_INFO_REPLY, type HistoryMessage } from "../services/generator";
+import {
+  generateAnswer,
+  generateWithFullContext,
+  NO_INFO_REPLY,
+  MAX_FULL_CONTEXT_CHARS,
+  type HistoryMessage,
+} from "../services/generator";
 
 export const chatRoute = new Hono();
 
@@ -43,22 +49,34 @@ chatRoute.post("/", async (c) => {
     createdAt: now,
   });
 
-  const retrieval = await retrieveRelevantChunks(message, documentId);
-
   let reply: string;
   let sources: Array<{ chunkIndex: number; content: string; score: number }>;
+  let usedChunkIds: string[] = [];
 
-  if (retrieval.belowThreshold) {
-    reply = NO_INFO_REPLY;
+  const useFullContext =
+    doc.fullText && doc.fullText.length <= MAX_FULL_CONTEXT_CHARS;
+
+  if (useFullContext) {
+    // Full-context: manda todo el documento, sin llamada a embeddings
+    const result = await generateWithFullContext(message, doc.fullText!, history);
+    reply = result.reply;
     sources = [];
   } else {
-    const result = await generateAnswer(message, retrieval.chunks, history);
-    reply = result.reply;
-    sources = retrieval.chunks.map((ch) => ({
-      chunkIndex: ch.chunkIndex,
-      content: ch.content,
-      score: ch.score,
-    }));
+    // RAG: busca chunks relevantes por similitud semántica
+    const retrieval = await retrieveRelevantChunks(message, documentId);
+    if (retrieval.belowThreshold) {
+      reply = NO_INFO_REPLY;
+      sources = [];
+    } else {
+      const result = await generateAnswer(message, retrieval.chunks, history);
+      reply = result.reply;
+      usedChunkIds = retrieval.chunks.map((ch) => ch.id);
+      sources = retrieval.chunks.map((ch) => ({
+        chunkIndex: ch.chunkIndex,
+        content: ch.content,
+        score: ch.score,
+      }));
+    }
   }
 
   await db.insert(conversations).values({
@@ -66,7 +84,7 @@ chatRoute.post("/", async (c) => {
     documentId,
     role: "assistant",
     content: reply,
-    sources: JSON.stringify(retrieval.chunks.map((ch) => ch.id)),
+    sources: usedChunkIds.length > 0 ? JSON.stringify(usedChunkIds) : null,
     createdAt: Date.now(),
   });
 
