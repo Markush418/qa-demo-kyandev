@@ -14,6 +14,10 @@ import {
 
 export const chatRoute = new Hono();
 
+// Si el mejor chunk supera este score, RAG es suficiente (pregunta específica).
+// Por debajo, escala a full-context (pregunta global/estructural).
+const HIGH_CONFIDENCE_THRESHOLD = 0.55;
+
 chatRoute.post("/", async (c) => {
   const body = await c.req.json().catch(() => null);
   const documentId = body?.documentId;
@@ -39,34 +43,46 @@ chatRoute.post("/", async (c) => {
     content: m.content,
   }));
 
-  const now = Date.now();
   await db.insert(conversations).values({
     id: nanoid(),
     documentId,
     role: "user",
     content: message,
     sources: null,
-    createdAt: now,
+    createdAt: Date.now(),
   });
 
+  // Siempre calcula similitud semántica primero (barato: 1 embedding + cosine).
+  // El score del mejor chunk determina qué modo usar.
+  const retrieval = await retrieveRelevantChunks(message, documentId);
+  const bestScore = retrieval.chunks[0]?.score ?? 0;
+
   let reply: string;
-  let sources: Array<{ chunkIndex: number; content: string; score: number }>;
+  let sources: Array<{ chunkIndex: number; content: string; score: number }> = [];
   let usedChunkIds: string[] = [];
+  let mode: "rag" | "full-context" | "rag-fallback";
 
-  const useFullContext =
-    doc.fullText && doc.fullText.length <= MAX_FULL_CONTEXT_CHARS;
-
-  if (useFullContext) {
-    // Full-context: manda todo el documento, sin llamada a embeddings
-    const result = await generateWithFullContext(message, doc.fullText!, history);
+  if (bestScore >= HIGH_CONFIDENCE_THRESHOLD) {
+    // Pregunta específica con match claro → RAG (rápido y barato)
+    mode = "rag";
+    const result = await generateAnswer(message, retrieval.chunks, history);
     reply = result.reply;
-    sources = [];
+    usedChunkIds = retrieval.chunks.map((ch) => ch.id);
+    sources = retrieval.chunks.map((ch) => ({
+      chunkIndex: ch.chunkIndex,
+      content: ch.content,
+      score: ch.score,
+    }));
+  } else if (doc.fullText && doc.fullText.length <= MAX_FULL_CONTEXT_CHARS) {
+    // Pregunta global/estructural → Full-context (más recursos, cobertura total)
+    mode = "full-context";
+    const result = await generateWithFullContext(message, doc.fullText, history);
+    reply = result.reply;
   } else {
-    // RAG: busca chunks relevantes por similitud semántica
-    const retrieval = await retrieveRelevantChunks(message, documentId);
+    // Documento demasiado grande para full-context → RAG con lo que hay
+    mode = "rag-fallback";
     if (retrieval.belowThreshold) {
       reply = NO_INFO_REPLY;
-      sources = [];
     } else {
       const result = await generateAnswer(message, retrieval.chunks, history);
       reply = result.reply;
@@ -88,5 +104,5 @@ chatRoute.post("/", async (c) => {
     createdAt: Date.now(),
   });
 
-  return c.json({ reply, sources });
+  return c.json({ reply, sources, mode });
 });
