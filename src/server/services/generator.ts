@@ -2,8 +2,8 @@ import OpenAI from "openai";
 import type { RetrievedChunk } from "./retriever";
 
 const MODEL = process.env.OPENAI_CHAT_MODEL || "gpt-4o-mini";
-const MAX_TOKENS = 1024;
-const HISTORY_LIMIT = 5;
+const MAX_TOKENS = 2048;
+const HISTORY_LIMIT = 6;
 
 export interface HistoryMessage {
   role: "user" | "assistant";

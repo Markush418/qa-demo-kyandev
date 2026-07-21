@@ -4,8 +4,8 @@ import { chunks as chunksTable } from "../db/schema";
 import { cosineSimilarity } from "../utils/cosine";
 import { embedQuery } from "./embedder";
 
-const TOP_K = 5;
-const SIMILARITY_THRESHOLD = 0.3;
+const TOP_K = 10;
+const SIMILARITY_THRESHOLD = 0.25;
 
 export interface RetrievedChunk {
   id: string;
