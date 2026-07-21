@@ -1,5 +1,4 @@
 import { Hono } from "hono";
-import { stream } from "hono/streaming";
 import { nanoid } from "nanoid";
 import { asc, eq } from "drizzle-orm";
 import { db } from "../db";
@@ -16,6 +15,7 @@ import {
 export const chatRoute = new Hono();
 
 const HIGH_CONFIDENCE_THRESHOLD = 0.55;
+const enc = new TextEncoder();
 
 chatRoute.post("/", async (c) => {
   const body = await c.req.json().catch(() => null);
@@ -79,30 +79,51 @@ chatRoute.post("/", async (c) => {
     }
   }
 
-  return stream(c, async (s) => {
-    await s.write(JSON.stringify({ type: "meta", mode, sources }) + "\n");
+  // Usa ReadableStream nativo — hono/streaming bufferea con Bun.
+  // X-Accel-Buffering: no previene que nginx (Render) también bufferice.
+  const responseStream = new ReadableStream({
+    async start(controller) {
+      const write = (obj: object) =>
+        controller.enqueue(enc.encode(JSON.stringify(obj) + "\n"));
 
-    let fullReply = "";
+      try {
+        write({ type: "meta", mode, sources });
 
-    if (staticReply) {
-      await s.write(JSON.stringify({ type: "token", content: staticReply }) + "\n");
-      fullReply = staticReply;
-    } else if (tokenGen) {
-      for await (const token of tokenGen) {
-        fullReply += token;
-        await s.write(JSON.stringify({ type: "token", content: token }) + "\n");
+        let fullReply = "";
+
+        if (staticReply) {
+          write({ type: "token", content: staticReply });
+          fullReply = staticReply;
+        } else if (tokenGen) {
+          for await (const token of tokenGen) {
+            fullReply += token;
+            write({ type: "token", content: token });
+          }
+        }
+
+        await db.insert(conversations).values({
+          id: nanoid(),
+          documentId,
+          role: "assistant",
+          content: fullReply,
+          sources: usedChunkIds.length > 0 ? JSON.stringify(usedChunkIds) : null,
+          createdAt: Date.now(),
+        });
+
+        write({ type: "done" });
+      } catch (err) {
+        console.error("Stream error:", err);
+      } finally {
+        controller.close();
       }
-    }
+    },
+  });
 
-    await db.insert(conversations).values({
-      id: nanoid(),
-      documentId,
-      role: "assistant",
-      content: fullReply,
-      sources: usedChunkIds.length > 0 ? JSON.stringify(usedChunkIds) : null,
-      createdAt: Date.now(),
-    });
-
-    await s.write(JSON.stringify({ type: "done" }) + "\n");
+  return new Response(responseStream, {
+    headers: {
+      "Content-Type": "text/plain; charset=utf-8",
+      "Cache-Control": "no-cache, no-transform",
+      "X-Accel-Buffering": "no",
+    },
   });
 });
