@@ -1,12 +1,13 @@
 import { Hono } from "hono";
+import { stream } from "hono/streaming";
 import { nanoid } from "nanoid";
 import { asc, eq } from "drizzle-orm";
 import { db } from "../db";
 import { documents, conversations } from "../db/schema";
 import { retrieveRelevantChunks } from "../services/retriever";
 import {
-  generateAnswer,
-  generateWithFullContext,
+  generateAnswerStream,
+  generateWithFullContextStream,
   NO_INFO_REPLY,
   MAX_FULL_CONTEXT_CHARS,
   type HistoryMessage,
@@ -14,8 +15,6 @@ import {
 
 export const chatRoute = new Hono();
 
-// Si el mejor chunk supera este score, RAG es suficiente (pregunta específica).
-// Por debajo, escala a full-context (pregunta global/estructural).
 const HIGH_CONFIDENCE_THRESHOLD = 0.55;
 
 chatRoute.post("/", async (c) => {
@@ -52,57 +51,58 @@ chatRoute.post("/", async (c) => {
     createdAt: Date.now(),
   });
 
-  // Siempre calcula similitud semántica primero (barato: 1 embedding + cosine).
-  // El score del mejor chunk determina qué modo usar.
   const retrieval = await retrieveRelevantChunks(message, documentId);
   const bestScore = retrieval.chunks[0]?.score ?? 0;
 
-  let reply: string;
+  let mode: "rag" | "full-context" | "rag-fallback";
   let sources: Array<{ chunkIndex: number; content: string; score: number }> = [];
   let usedChunkIds: string[] = [];
-  let mode: "rag" | "full-context" | "rag-fallback";
+  let tokenGen: AsyncGenerator<string> | null = null;
+  let staticReply: string | null = null;
 
   if (bestScore >= HIGH_CONFIDENCE_THRESHOLD) {
-    // Pregunta específica con match claro → RAG (rápido y barato)
     mode = "rag";
-    const result = await generateAnswer(message, retrieval.chunks, history);
-    reply = result.reply;
+    sources = retrieval.chunks.map((ch) => ({ chunkIndex: ch.chunkIndex, content: ch.content, score: ch.score }));
     usedChunkIds = retrieval.chunks.map((ch) => ch.id);
-    sources = retrieval.chunks.map((ch) => ({
-      chunkIndex: ch.chunkIndex,
-      content: ch.content,
-      score: ch.score,
-    }));
+    tokenGen = generateAnswerStream(message, retrieval.chunks, history);
   } else if (doc.fullText && doc.fullText.length <= MAX_FULL_CONTEXT_CHARS) {
-    // Pregunta global/estructural → Full-context (más recursos, cobertura total)
     mode = "full-context";
-    const result = await generateWithFullContext(message, doc.fullText, history);
-    reply = result.reply;
+    tokenGen = generateWithFullContextStream(message, doc.fullText, history);
   } else {
-    // Documento demasiado grande para full-context → RAG con lo que hay
     mode = "rag-fallback";
     if (retrieval.belowThreshold) {
-      reply = NO_INFO_REPLY;
+      staticReply = NO_INFO_REPLY;
     } else {
-      const result = await generateAnswer(message, retrieval.chunks, history);
-      reply = result.reply;
+      sources = retrieval.chunks.map((ch) => ({ chunkIndex: ch.chunkIndex, content: ch.content, score: ch.score }));
       usedChunkIds = retrieval.chunks.map((ch) => ch.id);
-      sources = retrieval.chunks.map((ch) => ({
-        chunkIndex: ch.chunkIndex,
-        content: ch.content,
-        score: ch.score,
-      }));
+      tokenGen = generateAnswerStream(message, retrieval.chunks, history);
     }
   }
 
-  await db.insert(conversations).values({
-    id: nanoid(),
-    documentId,
-    role: "assistant",
-    content: reply,
-    sources: usedChunkIds.length > 0 ? JSON.stringify(usedChunkIds) : null,
-    createdAt: Date.now(),
-  });
+  return stream(c, async (s) => {
+    await s.write(JSON.stringify({ type: "meta", mode, sources }) + "\n");
 
-  return c.json({ reply, sources, mode });
+    let fullReply = "";
+
+    if (staticReply) {
+      await s.write(JSON.stringify({ type: "token", content: staticReply }) + "\n");
+      fullReply = staticReply;
+    } else if (tokenGen) {
+      for await (const token of tokenGen) {
+        fullReply += token;
+        await s.write(JSON.stringify({ type: "token", content: token }) + "\n");
+      }
+    }
+
+    await db.insert(conversations).values({
+      id: nanoid(),
+      documentId,
+      role: "assistant",
+      content: fullReply,
+      sources: usedChunkIds.length > 0 ? JSON.stringify(usedChunkIds) : null,
+      createdAt: Date.now(),
+    });
+
+    await s.write(JSON.stringify({ type: "done" }) + "\n");
+  });
 });

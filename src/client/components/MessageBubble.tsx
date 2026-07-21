@@ -22,23 +22,35 @@ export function MessageBubble({ message }: Props) {
         >
           {isUser ? (
             message.content
+          ) : message.streaming && message.content === "" ? (
+            // Waiting for first token — show animated dots
+            <span className="flex gap-1 py-1">
+              <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-slate-400 [animation-delay:0ms]" />
+              <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-slate-400 [animation-delay:150ms]" />
+              <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-slate-400 [animation-delay:300ms]" />
+            </span>
           ) : (
-            <Markdown
-              components={{
-                h2: ({ children }) => <h2 className="text-base font-semibold mt-3 mb-1 first:mt-0">{children}</h2>,
-                h3: ({ children }) => <h3 className="text-sm font-semibold mt-2 mb-0.5 first:mt-0">{children}</h3>,
-                p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
-                ul: ({ children }) => <ul className="list-disc pl-4 mb-2 space-y-0.5">{children}</ul>,
-                ol: ({ children }) => <ol className="list-decimal pl-4 mb-2 space-y-0.5">{children}</ol>,
-                li: ({ children }) => <li className="leading-snug">{children}</li>,
-                strong: ({ children }) => <strong className="font-semibold text-slate-900">{children}</strong>,
-                table: ({ children }) => <div className="overflow-x-auto mb-2"><table className="text-xs border-collapse w-full">{children}</table></div>,
-                th: ({ children }) => <th className="border border-slate-300 bg-slate-200 px-2 py-1 text-left font-semibold">{children}</th>,
-                td: ({ children }) => <td className="border border-slate-200 px-2 py-1">{children}</td>,
-              }}
-            >
-              {message.content}
-            </Markdown>
+            <>
+              <Markdown
+                components={{
+                  h2: ({ children }) => <h2 className="text-base font-semibold mt-3 mb-1 first:mt-0">{children}</h2>,
+                  h3: ({ children }) => <h3 className="text-sm font-semibold mt-2 mb-0.5 first:mt-0">{children}</h3>,
+                  p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+                  ul: ({ children }) => <ul className="list-disc pl-4 mb-2 space-y-0.5">{children}</ul>,
+                  ol: ({ children }) => <ol className="list-decimal pl-4 mb-2 space-y-0.5">{children}</ol>,
+                  li: ({ children }) => <li className="leading-snug">{children}</li>,
+                  strong: ({ children }) => <strong className="font-semibold text-slate-900">{children}</strong>,
+                  table: ({ children }) => <div className="overflow-x-auto mb-2"><table className="text-xs border-collapse w-full">{children}</table></div>,
+                  th: ({ children }) => <th className="border border-slate-300 bg-slate-200 px-2 py-1 text-left font-semibold">{children}</th>,
+                  td: ({ children }) => <td className="border border-slate-200 px-2 py-1">{children}</td>,
+                }}
+              >
+                {message.content}
+              </Markdown>
+              {message.streaming && (
+                <span className="inline-block h-3.5 w-0.5 animate-pulse bg-slate-500 align-middle ml-0.5 rounded-sm" />
+              )}
+            </>
           )}
         </div>
 

@@ -1,11 +1,13 @@
 import { useState, useCallback } from "react";
-import { sendChatMessage, type Source } from "../lib/api";
+import { sendChatMessageStream, type Source } from "../lib/api";
 
 export interface Message {
   id: string;
   role: "user" | "assistant";
   content: string;
   sources?: Source[];
+  mode?: string;
+  streaming?: boolean;
 }
 
 export function useChat(documentId: string) {
@@ -18,29 +20,45 @@ export function useChat(documentId: string) {
       const trimmed = text.trim();
       if (!trimmed || loading) return;
 
+      const assistantId = crypto.randomUUID();
+
       setMessages((prev) => [
         ...prev,
         { id: crypto.randomUUID(), role: "user", content: trimmed },
+        { id: assistantId, role: "assistant", content: "", streaming: true },
       ]);
       setLoading(true);
       setError(null);
 
-      try {
-        const response = await sendChatMessage(documentId, trimmed);
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: crypto.randomUUID(),
-            role: "assistant",
-            content: response.reply,
-            sources: response.sources,
-          },
-        ]);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Error al enviar el mensaje");
-      } finally {
-        setLoading(false);
-      }
+      await sendChatMessageStream(documentId, trimmed, {
+        onToken: (token) => {
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === assistantId ? { ...m, content: m.content + token } : m
+            )
+          );
+        },
+        onMeta: ({ mode, sources }) => {
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === assistantId ? { ...m, mode, sources } : m
+            )
+          );
+        },
+        onDone: () => {
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === assistantId ? { ...m, streaming: false } : m
+            )
+          );
+          setLoading(false);
+        },
+        onError: (err) => {
+          setMessages((prev) => prev.filter((m) => m.id !== assistantId));
+          setError(err.message);
+          setLoading(false);
+        },
+      });
     },
     [documentId, loading]
   );

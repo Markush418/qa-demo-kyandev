@@ -4,6 +4,7 @@ import { health } from "./routes/health";
 import { uploadRoute } from "./routes/upload";
 import { chatRoute } from "./routes/chat";
 import { documentsRoute } from "./routes/documents";
+import { suggestRoute } from "./routes/suggest";
 
 const app = new Hono();
 
@@ -15,6 +16,7 @@ app.onError((err, c) => {
 app.route("/api/health", health);
 app.route("/api/upload", uploadRoute);
 app.route("/api/chat", chatRoute);
+app.route("/api/suggest", suggestRoute);
 app.route("/api/documents", documentsRoute);
 
 // En producción, el frontend ya viene buildeado a dist/client y se sirve estático

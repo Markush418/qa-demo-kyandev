@@ -1,5 +1,7 @@
+import { useEffect, useState } from "react";
 import { useUpload } from "./hooks/useUpload";
 import { useChat } from "./hooks/useChat";
+import { fetchSuggestions } from "./lib/api";
 import { UploadZone } from "./components/UploadZone";
 import { DocumentInfo } from "./components/DocumentInfo";
 import { ChatWindow } from "./components/ChatWindow";
@@ -31,7 +33,7 @@ export default function App() {
               Preguntale a tu documento
             </h1>
             <p className="mt-1 text-sm text-slate-500">
-              Subí un PDF o DOCX y hacé preguntas en lenguaje natural
+              Subí un PDF, DOCX o Markdown y hacé preguntas en lenguaje natural
             </p>
           </div>
           <UploadZone
@@ -56,6 +58,11 @@ function ChatView({
   onReset: () => void;
 }) {
   const { messages, loading, error, send } = useChat(doc.documentId);
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+
+  useEffect(() => {
+    fetchSuggestions(doc.documentId).then(setSuggestions);
+  }, [doc.documentId]);
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
@@ -65,6 +72,8 @@ function ChatView({
         messages={messages}
         loading={loading}
         filename={doc.filename}
+        suggestions={suggestions}
+        onSuggestionClick={send}
       />
 
       {error && (
