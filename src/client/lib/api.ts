@@ -64,10 +64,12 @@ export async function sendChatMessageStream(
       buffer = lines.pop() ?? "";
 
       for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed) continue;
+        // SSE format: "data: <json>"
+        if (!line.startsWith("data: ")) continue;
+        const jsonStr = line.slice(6).trim();
+        if (!jsonStr) continue;
         try {
-          const event = JSON.parse(trimmed);
+          const event = JSON.parse(jsonStr);
           if (event.type === "meta") callbacks.onMeta(event);
           else if (event.type === "token") callbacks.onToken(event.content);
           else if (event.type === "done") callbacks.onDone();

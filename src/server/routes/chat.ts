@@ -79,12 +79,12 @@ chatRoute.post("/", async (c) => {
     }
   }
 
-  // Usa ReadableStream nativo — hono/streaming bufferea con Bun.
-  // X-Accel-Buffering: no previene que nginx (Render) también bufferice.
+  // SSE (text/event-stream): nginx tiene soporte nativo y desactiva buffering automáticamente.
+  // Más confiable que X-Accel-Buffering para proxies y CDNs intermedios.
   const responseStream = new ReadableStream({
     async start(controller) {
       const write = (obj: object) =>
-        controller.enqueue(enc.encode(JSON.stringify(obj) + "\n"));
+        controller.enqueue(enc.encode(`data: ${JSON.stringify(obj)}\n\n`));
 
       try {
         write({ type: "meta", mode, sources });
@@ -121,8 +121,9 @@ chatRoute.post("/", async (c) => {
 
   return new Response(responseStream, {
     headers: {
-      "Content-Type": "text/plain; charset=utf-8",
-      "Cache-Control": "no-cache, no-transform",
+      "Content-Type": "text/event-stream; charset=utf-8",
+      "Cache-Control": "no-cache",
+      "Connection": "keep-alive",
       "X-Accel-Buffering": "no",
     },
   });

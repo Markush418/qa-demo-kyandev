@@ -1,4 +1,5 @@
 import { useState, useCallback } from "react";
+import { flushSync } from "react-dom";
 import { sendChatMessageStream, type Source } from "../lib/api";
 
 export interface Message {
@@ -32,11 +33,15 @@ export function useChat(documentId: string) {
 
       await sendChatMessageStream(documentId, trimmed, {
         onToken: (token) => {
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.id === assistantId ? { ...m, content: m.content + token } : m
-            )
-          );
+          // flushSync fuerza un re-render sincrónico por token.
+          // Sin esto React 18 agrupa todos los tokens de un chunk en un solo paint.
+          flushSync(() => {
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === assistantId ? { ...m, content: m.content + token } : m
+              )
+            );
+          });
         },
         onMeta: ({ mode, sources }) => {
           setMessages((prev) =>
