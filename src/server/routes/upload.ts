@@ -20,6 +20,7 @@ function resolveFileType(filename: string, mimeType: string): FileType | null {
   ) {
     return "docx";
   }
+  if (ext === "md" || ext === "markdown") return "md";
   return null;
 }
 
@@ -33,7 +34,7 @@ uploadRoute.post("/", async (c) => {
 
   const fileType = resolveFileType(file.name, file.type);
   if (!fileType) {
-    return c.json({ error: "Formato no soportado. Solo se aceptan archivos PDF o DOCX." }, 400);
+    return c.json({ error: "Formato no soportado. Solo se aceptan archivos PDF, DOCX o Markdown (.md)." }, 400);
   }
 
   const sizeMB = file.size / (1024 * 1024);

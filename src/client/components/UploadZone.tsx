@@ -7,16 +7,22 @@ interface Props {
   onReset: () => void;
 }
 
-const ACCEPTED = ".pdf,.docx";
-const ACCEPTED_MIME = ["application/pdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"];
+const ACCEPTED = ".pdf,.docx,.md,.markdown";
+const ACCEPTED_MIME = [
+  "application/pdf",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "text/markdown",
+  "text/x-markdown",
+];
+const ACCEPTED_EXT = ["pdf", "docx", "md", "markdown"];
 
 export function UploadZone({ state, onFile, onReset }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
 
   function handleFile(file: File) {
-    const ext = file.name.split(".").pop()?.toLowerCase();
-    if (!ACCEPTED_MIME.includes(file.type) && ext !== "pdf" && ext !== "docx") {
+    const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
+    if (!ACCEPTED_MIME.includes(file.type) && !ACCEPTED_EXT.includes(ext)) {
       return;
     }
     onFile(file);
@@ -96,7 +102,7 @@ export function UploadZone({ state, onFile, onReset }: Props) {
           </svg>
         </div>
         <p className="text-sm font-medium text-slate-700">
-          {dragging ? "Soltá el archivo aquí" : "Arrastrá un PDF o DOCX"}
+          {dragging ? "Soltá el archivo aquí" : "Arrastrá un PDF, DOCX o Markdown"}
         </p>
         <p className="mt-1 text-xs text-slate-400">o hacé clic para seleccionar</p>
         <p className="mt-3 text-xs text-slate-400">Máximo 20 MB · 200 páginas</p>

@@ -3,7 +3,7 @@ import { sqliteTable, text, integer } from "drizzle-orm/sqlite-core";
 export const documents = sqliteTable("documents", {
   id: text("id").primaryKey(),
   filename: text("filename").notNull(),
-  fileType: text("file_type").notNull(), // "pdf" | "docx"
+  fileType: text("file_type").notNull(), // "pdf" | "docx" | "md"
   pageCount: integer("page_count").notNull(),
   chunkCount: integer("chunk_count").notNull(),
   fullText: text("full_text"),            // texto completo para full-context mode
