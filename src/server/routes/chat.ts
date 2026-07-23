@@ -60,15 +60,19 @@ chatRoute.post("/", async (c) => {
   let tokenGen: AsyncGenerator<string> | null = null;
   let staticReply: string | null = null;
 
-  if (bestScore >= HIGH_CONFIDENCE_THRESHOLD) {
+  if (doc.fullText && doc.fullText.length <= MAX_FULL_CONTEXT_CHARS) {
+    // Siempre full-context si el documento entra en la ventana.
+    // RAG con top-K puede omitir chunks relevantes y provocar alucinaciones.
+    mode = "full-context";
+    tokenGen = generateWithFullContextStream(message, doc.fullText, history);
+  } else if (bestScore >= HIGH_CONFIDENCE_THRESHOLD) {
+    // Documento demasiado grande: RAG con match claro
     mode = "rag";
     sources = retrieval.chunks.map((ch) => ({ chunkIndex: ch.chunkIndex, content: ch.content, score: ch.score }));
     usedChunkIds = retrieval.chunks.map((ch) => ch.id);
     tokenGen = generateAnswerStream(message, retrieval.chunks, history);
-  } else if (doc.fullText && doc.fullText.length <= MAX_FULL_CONTEXT_CHARS) {
-    mode = "full-context";
-    tokenGen = generateWithFullContextStream(message, doc.fullText, history);
   } else {
+    // Documento demasiado grande + match pobre
     mode = "rag-fallback";
     if (retrieval.belowThreshold) {
       staticReply = NO_INFO_REPLY;
