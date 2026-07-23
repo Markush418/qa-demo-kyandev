@@ -6,6 +6,38 @@ interface Props {
   message: Message;
 }
 
+const MODE_CONFIG: Record<string, { label: string; title: string; className: string }> = {
+  "full-context": {
+    label: "Contexto completo",
+    title: "El documento completo fue enviado al modelo",
+    className: "bg-indigo-50 text-indigo-600 border-indigo-100",
+  },
+  "rag": {
+    label: "RAG",
+    title: "Búsqueda semántica — se usaron los fragmentos más relevantes",
+    className: "bg-emerald-50 text-emerald-600 border-emerald-100",
+  },
+  "rag-fallback": {
+    label: "RAG fallback",
+    title: "Documento muy grande — búsqueda semántica con cobertura parcial",
+    className: "bg-amber-50 text-amber-600 border-amber-100",
+  },
+};
+
+function ModeBadge({ mode }: { mode: string }) {
+  const config = MODE_CONFIG[mode];
+  if (!config) return null;
+  return (
+    <span
+      title={config.title}
+      className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium ${config.className}`}
+    >
+      <span className="h-1.5 w-1.5 rounded-full bg-current opacity-70" />
+      {config.label}
+    </span>
+  );
+}
+
 export function MessageBubble({ message }: Props) {
   const [sourcesOpen, setSourcesOpen] = useState(false);
   const isUser = message.role === "user";
@@ -53,6 +85,11 @@ export function MessageBubble({ message }: Props) {
             </>
           )}
         </div>
+
+        {/* Badge de modo — aparece cuando la respuesta está completa */}
+        {!isUser && !message.streaming && message.mode && (
+          <ModeBadge mode={message.mode} />
+        )}
 
         {/* Fuentes expandibles — solo mensajes de asistente con sources */}
         {!isUser && message.sources && message.sources.length > 0 && (
