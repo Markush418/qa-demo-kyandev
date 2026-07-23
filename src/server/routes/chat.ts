@@ -51,35 +51,37 @@ chatRoute.post("/", async (c) => {
     createdAt: Date.now(),
   });
 
-  const retrieval = await retrieveRelevantChunks(message, documentId);
-  const bestScore = retrieval.chunks[0]?.score ?? 0;
-
   let mode: "rag" | "full-context" | "rag-fallback";
   let sources: Array<{ chunkIndex: number; content: string; score: number }> = [];
   let usedChunkIds: string[] = [];
   let tokenGen: AsyncGenerator<string> | null = null;
   let staticReply: string | null = null;
 
-  if (doc.fullText && doc.fullText.length <= MAX_FULL_CONTEXT_CHARS) {
-    // Siempre full-context si el documento entra en la ventana.
-    // RAG con top-K puede omitir chunks relevantes y provocar alucinaciones.
+  const fitsInContext = doc.fullText && doc.fullText.length <= MAX_FULL_CONTEXT_CHARS;
+
+  if (fitsInContext) {
+    // Documento entra en la ventana — full-context directo, sin embedding.
     mode = "full-context";
-    tokenGen = generateWithFullContextStream(message, doc.fullText, history);
-  } else if (bestScore >= HIGH_CONFIDENCE_THRESHOLD) {
-    // Documento demasiado grande: RAG con match claro
-    mode = "rag";
-    sources = retrieval.chunks.map((ch) => ({ chunkIndex: ch.chunkIndex, content: ch.content, score: ch.score }));
-    usedChunkIds = retrieval.chunks.map((ch) => ch.id);
-    tokenGen = generateAnswerStream(message, retrieval.chunks, history);
+    tokenGen = generateWithFullContextStream(message, doc.fullText!, history);
   } else {
-    // Documento demasiado grande + match pobre
-    mode = "rag-fallback";
-    if (retrieval.belowThreshold) {
-      staticReply = NO_INFO_REPLY;
-    } else {
+    // Documento demasiado grande — necesitamos RAG, recién aquí generamos el embedding.
+    const retrieval = await retrieveRelevantChunks(message, documentId);
+    const bestScore = retrieval.chunks[0]?.score ?? 0;
+
+    if (bestScore >= HIGH_CONFIDENCE_THRESHOLD) {
+      mode = "rag";
       sources = retrieval.chunks.map((ch) => ({ chunkIndex: ch.chunkIndex, content: ch.content, score: ch.score }));
       usedChunkIds = retrieval.chunks.map((ch) => ch.id);
       tokenGen = generateAnswerStream(message, retrieval.chunks, history);
+    } else {
+      mode = "rag-fallback";
+      if (retrieval.belowThreshold) {
+        staticReply = NO_INFO_REPLY;
+      } else {
+        sources = retrieval.chunks.map((ch) => ({ chunkIndex: ch.chunkIndex, content: ch.content, score: ch.score }));
+        usedChunkIds = retrieval.chunks.map((ch) => ch.id);
+        tokenGen = generateAnswerStream(message, retrieval.chunks, history);
+      }
     }
   }
 
